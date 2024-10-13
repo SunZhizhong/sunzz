@@ -42,8 +42,12 @@ sudo yum install -y mongodb-org
 sudo systemctl start mongod
 sudo systemctl enable mongod
 
-# 等待 MongoDB 启动完成
-sleep 5
+# 检查 MongoDB 是否正在运行
+if ! pgrep -x "mongod" > /dev/null
+then
+    echo "MongoDB 未能启动，请检查安装过程。"
+    exit 1
+fi
 
 # 配置 MongoDB 以允许对 /tmp 的写权限
 sudo chmod 1777 /tmp
