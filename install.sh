@@ -23,21 +23,27 @@ ln -sf /usr/local/bin/python3.8 /usr/bin/python3
 wget https://bootstrap.pypa.io/get-pip.py
 python3 get-pip.py
 
-# 安装MongoDB
+# 安装MongoDB Community Edition 8.0
+# 配置存储库
 cat > /etc/yum.repos.d/mongodb-org-8.0.repo <<EOL
 [mongodb-org-8.0]
 name=MongoDB Repository
-baseurl=https://repo.mongodb.org/yum/redhat/8/mongodb-org/8.0/x86_64/
+baseurl=https://repo.mongodb.org/yum/redhat/9/mongodb-org/8.0/x86_64/
 gpgcheck=1
 enabled=1
 gpgkey=https://pgp.mongodb.com/server-8.0.asc
 EOL
 
+# 安装 MongoDB Community Server
 sudo yum install -y mongodb-org
 
 # 启动MongoDB并设置开机启动
 systemctl start mongod
 systemctl enable mongod
+
+# 确保MongoDB端口未被防火墙阻止
+firewall-cmd --permanent --add-port=27017/tcp
+firewall-cmd --reload
 
 # 安装MongoDB对SELinux的策略
 sudo yum install -y git make checkpolicy policycoreutils selinux-policy-devel
@@ -45,10 +51,6 @@ git clone https://github.com/mongodb/mongodb-selinux
 cd mongodb-selinux
 make
 sudo make install
-
-# 确保MongoDB端口未被防火墙阻止
-firewall-cmd --permanent --add-port=27017/tcp
-firewall-cmd --reload
 
 # 配置MongoDB对/tmp的写权限并创建用户
 chmod 1777 /tmp
