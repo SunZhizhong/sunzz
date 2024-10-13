@@ -38,26 +38,29 @@ EOF
 
 sudo yum install -y mongodb-org
 
-# 配置 MongoDB 以允许对 /tmp 的写权限
-sudo chmod 1777 /tmp
-
 # 启动并配置 MongoDB
 sudo systemctl start mongod
 sudo systemctl enable mongod
+
+# 等待 MongoDB 启动完成
+sleep 5
+
+# 配置 MongoDB 以允许对 /tmp 的写权限
+sudo chmod 1777 /tmp
 
 # 检查防火墙配置，确保 MongoDB 端口未被阻止
 sudo firewall-cmd --zone=public --add-port=27017/tcp --permanent
 sudo firewall-cmd --reload
 
 # 创建 MongoDB 用户并授予读写权限
-mongo --eval "
-use admin;
+mongo <<EOF
+use admin
 db.createUser({
-  user: 'myUserAdmin',
-  pwd: 'abc123',
-  roles: [ { role: 'userAdminAnyDatabase', db: 'admin' }, 'readWriteAnyDatabase' ]
-});
-"
+  user: "myUserAdmin",
+  pwd: "abc123",
+  roles: [ { role: "userAdminAnyDatabase", db: "admin" }, "readWriteAnyDatabase" ]
+})
+EOF
 
 # 安装 Python 所需的库
 pip3.8 install pymongo flask requests beautifulsoup4
