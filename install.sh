@@ -91,7 +91,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # 克隆并安装 Coles 商品信息抓取代码
-git clone --recurse-submodules https://github.com/adambadge/coles-scraper.git
+git clone --recurse-submodules https://github.com/adambadge/coles-scraper/blob/master/coles.ipynb
 cd coles-scraper
 pip3 install --default-timeout=100 -r requirements.txt
 if [ $? -ne 0 ]; then
