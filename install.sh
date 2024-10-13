@@ -12,12 +12,12 @@ fi
 # 安装 Python 3.8 和 pip
 PYTHON_VERSION="3.8.16"
 cd /usr/src
-sudo wget https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tgz
+sudo wget -O Python-$PYTHON_VERSION.tgz https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tgz
 if [ $? -ne 0 ]; then
     echo "[错误] 无法下载 Python 源代码。"
     exit 1
 fi
-sudo tar xzf Python-$PYTHON_VERSION.tgz
+sudo tar --overwrite -xzf Python-$PYTHON_VERSION.tgz
 cd Python-$PYTHON_VERSION
 sudo ./configure --enable-optimizations
 sudo make altinstall
@@ -77,7 +77,7 @@ cd /opt
 git clone https://github.com/mongodb/mongodb-selinux
 cd mongodb-selinux
 make
-sudo make install
+sudo make install -B
 if [ $? -ne 0 ]; then
     echo "[错误] 无法安装 MongoDB 的 SELinux 策略。"
     exit 1
@@ -91,7 +91,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # 克隆并安装 Coles 商品信息抓取代码
-git clone https://github.com/adambadge/coles-scraper.git
+git clone --recurse-submodules https://github.com/adambadge/coles-scraper.git
 cd coles-scraper
 pip3 install --default-timeout=100 -r requirements.txt
 if [ $? -ne 0 ]; then
