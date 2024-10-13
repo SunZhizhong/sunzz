@@ -90,33 +90,100 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 克隆并安装 Coles 商品信息抓取代码
-git clone --recurse-submodules https://github.com/adambadge/coles-scraper/blob/master/coles.ipynb
-cd coles-scraper
-pip3 install --default-timeout=100 -r requirements.txt
+# 获取 coles.ipynb 文件
+wget https://raw.githubusercontent.com/adambadge/coles-scraper/master/coles.ipynb -O coles.ipynb
 if [ $? -ne 0 ]; then
-    echo "[错误] 无法安装 Coles 抓取代码的依赖，请检查网络连接或手动安装依赖。"
+    echo "[错误] 无法下载 coles.ipynb 文件。"
     exit 1
 fi
 
-# 运行商品抓取脚本并存储商品信息到 MongoDB
-python3 coles.ipynb
+# 使用 nbconvert 将 .ipynb 转换为 Python 脚本并执行
+pip3 install nbconvert
+if [ $? -ne 0 ]; then
+    echo "[错误] 无法安装 nbconvert。"
+    exit 1
+fi
+jupyter nbconvert --to script coles.ipynb
+if [ $? -ne 0 ]; then
+    echo "[错误] 无法将 coles.ipynb 转换为 Python 脚本。"
+    exit 1
+fi
+python3 coles.py
 if [ $? -ne 0 ]; then
     echo "[错误] 运行 Coles 抓取脚本失败。"
     exit 1
 fi
 
 # 前端 HTML 显示商品的图片，名称，实时价格，当前打折情况，历史最低价
-# 此处省略详细 HTML 代码，但请确保通过 Flask 或其他 Web 框架进行前后端整合
-
-# 启动 Flask 应用程序
-cd /opt/your_flask_app_directory
-pip3 install -r requirements.txt
+# 创建一个简单的 Flask 应用程序以实现前后端整合
+pip3 install Flask
 if [ $? -ne 0 ]; then
-    echo "[错误] 无法安装 Flask 应用程序的依赖。"
+    echo "[错误] 无法安装 Flask。"
     exit 1
 fi
-python3 app.py
+
+# 创建 Flask 应用程序目录并编写代码
+mkdir -p /opt/coles_flask_app
+cd /opt/coles_flask_app
+
+cat <<EOF > app.py
+from flask import Flask, render_template
+import pymongo
+
+app = Flask(__name__)
+
+# 连接到 MongoDB 数据库
+client = pymongo.MongoClient("mongodb://localhost:27017/")
+db = client["coles"]
+collection = db["products"]
+
+@app.route('/')
+def index():
+    # 从数据库中获取商品信息
+    products = collection.find()
+    return render_template('index.html', products=products)
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=5000)
+EOF
+
+# 创建 HTML 模板目录并编写模板文件
+mkdir -p templates
+
+cat <<EOF > templates/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coles Products</title>
+</head>
+<body>
+    <h1>Coles Products</h1>
+    <table border="1">
+        <tr>
+            <th>图片</th>
+            <th>名称</th>
+            <th>实时价格</th>
+            <th>当前打折情况</th>
+            <th>历史最低价</th>
+        </tr>
+        {% for product in products %}
+        <tr>
+            <td><img src="{{ product['image_url'] }}" alt="{{ product['name'] }}" width="100"></td>
+            <td>{{ product['name'] }}</td>
+            <td>{{ product['current_price'] }}</td>
+            <td>{{ product['discount'] }}</td>
+            <td>{{ product['historical_low'] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
+EOF
+
+# 启动 Flask 应用程序
+python3 app.py &
 if [ $? -ne 0 ]; then
     echo "[错误] 无法启动 Flask 应用程序。"
     exit 1
