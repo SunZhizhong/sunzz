@@ -56,15 +56,11 @@ sudo chmod 1777 /tmp
 sudo firewall-cmd --zone=public --add-port=27017/tcp --permanent
 sudo firewall-cmd --reload
 
+# 设置 MongoDB 路径
+export PATH=$PATH:/usr/bin:/usr/local/bin
+
 # 创建 MongoDB 用户并授予读写权限
-cat <<EOF | mongo
-use admin
-db.createUser({
-  user: "myUserAdmin",
-  pwd: "abc123",
-  roles: [ { role: "userAdminAnyDatabase", db: "admin" }, "readWriteAnyDatabase" ]
-})
-EOF
+mongo --eval 'use admin; db.createUser({user: "myUserAdmin", pwd: "abc123", roles: [ { role: "userAdminAnyDatabase", db: "admin" }, "readWriteAnyDatabase" ]});'
 
 # 安装 Python 所需的库
 pip3.8 install pymongo flask requests beautifulsoup4
