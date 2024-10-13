@@ -52,14 +52,12 @@ firewall-cmd --reload
 
 # 配置MongoDB对/tmp的写权限并创建用户
 chmod 1777 /tmp
-mongo <<EOF
+mongosh <<EOF
 use admin
 db.createUser({ user: "admin", pwd: "password", roles: [ { role: "userAdminAnyDatabase", db: "admin" } ] })
 use coles_data
 db.createUser({ user: "coles_user", pwd: "coles_pass", roles: [ { role: "readWrite", db: "coles_data" } ] })
 EOF
-
-
 
 # 安装Python依赖库
 pip3 install pymongo flask requests beautifulsoup4
