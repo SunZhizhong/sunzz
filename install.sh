@@ -3,7 +3,7 @@
 # 一键安装脚本用于批量获取澳洲各个网站生活用品和食品价格，适用于CentOS 7
 
 # 安装必要工具和插件
-sudo yum install -y git make checkpolicy policycoreutils selinux-policy-devel wget gcc openssl-devel bzip2-devel libffi-devel zlib-devel
+sudo yum install -y git make checkpolicy policycoreutils selinux-policy-devel wget gcc openssl-devel bzip2-devel libffi-devel zlib-devel openssl11
 if [ $? -ne 0 ]; then
     echo "[错误] 无法安装必要工具和插件，请检查网络连接或软件源设置。"
     exit 1
@@ -19,7 +19,7 @@ if [ $? -ne 0 ]; then
 fi
 sudo tar --overwrite -xzf Python-$PYTHON_VERSION.tgz
 cd Python-$PYTHON_VERSION
-sudo ./configure --enable-optimizations
+sudo ./configure --enable-optimizations --with-openssl=/usr/local/openssl11
 sudo make altinstall
 if [ $? -ne 0 ]; then
     echo "[错误] 无法编译安装 Python。"
@@ -110,7 +110,7 @@ if [ $? -ne 0 ]; then
 fi
 python3 coles.py
 if [ $? -ne 0 ]; then
-    echo "[错误] 运行 Coles 抓取脚本失败。"
+    echo "[错误] 运行 Coles 抓取脚本失败，请检查 Python 依赖或网络连接。"
     exit 1
 fi
 
