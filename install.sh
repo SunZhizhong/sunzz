@@ -93,9 +93,9 @@ fi
 # 克隆并安装 Coles 商品信息抓取代码
 git clone https://github.com/adambadge/coles-scraper.git
 cd coles-scraper
-pip3 install -r requirements.txt
+pip3 install --default-timeout=100 -r requirements.txt
 if [ $? -ne 0 ]; then
-    echo "[错误] 无法安装 Coles 抓取代码的依赖。"
+    echo "[错误] 无法安装 Coles 抓取代码的依赖，请检查网络连接或手动安装依赖。"
     exit 1
 fi
 
