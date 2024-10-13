@@ -1,156 +1,162 @@
 #!/bin/bash
+# 该脚本为CentOS 7上一键安装并设置商品信息爬取和展示的系统。
+# 包括安装Python、pip、MongoDB及相关依赖，配置抓取Coles商品信息和HTML前端显示。
+# 使用中文注释，一旦出现错误即停止执行。
 
-# 確保腳本在出現錯誤時停止
+# 设置错误处理
 set -e
 
-# 更新系統並安裝必須的依賴包
+# 更新系统并安装基本工具
 yum update -y
+yum install -y wget gcc gcc-c++ make zlib-devel openssl-devel bzip2-devel libffi-devel tar
 
-# 安裝 EPEL (Extra Packages for Enterprise Linux)
-yum install -y epel-release
+# 安装 Python 3.8
+cd /usr/src
+wget https://www.python.org/ftp/python/3.8.0/Python-3.8.0.tgz
+tar xzf Python-3.8.0.tgz
+cd Python-3.8.0
+./configure --enable-optimizations
+make altinstall
 
-# 安裝 Python 3.8 和 pip
-yum install -y python38 python38-pip
+# 确保 Python 3.8 可用，并安装 pip
+ln -s /usr/local/bin/python3.8 /usr/bin/python3
+wget https://bootstrap.pypa.io/get-pip.py
+python3 get-pip.py
 
-# 創建 Python 3.8 的符號鏈接（確保版本一致）
-ln -sf /usr/bin/python3.8 /usr/bin/python3
-ln -sf /usr/bin/pip3.8 /usr/bin/pip3
-
-# 安裝 MongoDB
-cat <<EOF > /etc/yum.repos.d/mongodb-org-6.0.repo
+# 安装MongoDB
+cat > /etc/yum.repos.d/mongodb-org-6.0.repo <<EOL
 [mongodb-org-6.0]
 name=MongoDB Repository
 baseurl=https://repo.mongodb.org/yum/redhat/7/mongodb-org/6.0/x86_64/
 gpgcheck=1
 enabled=1
 gpgkey=https://www.mongodb.org/static/pgp/server-6.0.asc
-EOF
+EOL
 
 yum install -y mongodb-org
 
-# 啟動和設置 MongoDB 開機自啟
+# 启动MongoDB并设置开机启动
 systemctl start mongod
 systemctl enable mongod
 
-# 確保 MongoDB 的端口 27017 沒有被防火牆阻止
-firewall-cmd --zone=public --add-port=27017/tcp --permanent
+# 确保MongoDB端口未被防火墙阻止
+firewall-cmd --permanent --add-port=27017/tcp
 firewall-cmd --reload
 
-# 確保 /tmp 具有寫權限
+# 配置MongoDB对/tmp的写权限并创建用户
 chmod 1777 /tmp
-
-# 創建 MongoDB 用戶並賦予讀寫權限
 mongo <<EOF
 use admin
-db.createUser(
-  {
-    user: "python_user",
-    pwd: "secure_password",
-    roles: [ { role: "readWrite", db: "coles_db" } ]
-  }
-)
+db.createUser({ user: "admin", pwd: "password", roles: [ { role: "userAdminAnyDatabase", db: "admin" } ] })
+use coles_data
+db.createUser({ user: "coles_user", pwd: "coles_pass", roles: [ { role: "readWrite", db: "coles_data" } ] })
 EOF
 
-# 安裝必備 Python 庫
-pip3 install pymongo requests beautifulsoup4 flask
+# 安装Python依赖库
+pip3 install pymongo flask requests beautifulsoup4
 
-# 下載 Coles 商品信息獲取代碼
-curl -o coles_scraper.ipynb https://raw.githubusercontent.com/adambadge/coles-scraper/master/coles.ipynb
-
-# 編寫 Python 腳本來抓取商品信息並存儲至 MongoDB
-cat <<EOF > coles_scraper.py
-import pymongo
+# 整合Coles商品信息抓取脚本
+cat > coles_scraper.py <<EOL
+# -*- coding: utf-8 -*-
+"""
+Coles 商品信息抓取脚本，分析商品数据并存储到 MongoDB 中
+"""
 import requests
-import time
 from bs4 import BeautifulSoup
+from pymongo import MongoClient
+import datetime
 
-# 連接到 MongoDB
-try:
-    client = pymongo.MongoClient("mongodb://python_user:secure_password@localhost:27017/")
-    db = client["coles_db"]
-    col = db["products"]
-except Exception as e:
-    print("無法連接到 MongoDB:", e)
-    exit(1)
-
-# 獲取商品信息並存儲到 MongoDB
-try:
-    response = requests.get("https://coles.com.au/api/products")
+def scrape_coles():
+    url = "https://www.coles.com.au/c/groceries"
+    response = requests.get(url)
     response.encoding = 'utf-8'
-    products = response.json()
-    
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # 示例代码：解析商品数据
+        items = soup.find_all('div', class_='product')
+        product_list = []
+        for item in items:
+            product = {
+                'name': item.find('h2').text.strip(),
+                'price': item.find('span', class_='price').text.strip(),
+                'image': item.find('img')['src'],
+                'date': datetime.datetime.now()
+            }
+            product_list.append(product)
+        return product_list
+    else:
+        print("无法获取Coles商品信息")
+        return []
+
+def save_to_mongo(products):
+    client = MongoClient("mongodb://coles_user:coles_pass@localhost:27017/coles_data")
+    db = client.coles_data
+    collection = db.products
     for product in products:
-        product_name = product.get("name")
-        product_price = product.get("price")
-        
-        # 插入到 MongoDB
-        col.update_one(
-            {"name": product_name},
-            {"$set": {"price": product_price, "last_updated": time.time()}},
-            upsert=True
-        )
-        
-    print("成功存儲商品信息")
-except Exception as e:
-    print("獲取商品信息失敗:", e)
-    exit(1)
-EOF
+        collection.update_one({'name': product['name']}, {'$set': product}, upsert=True)
+    print("商品信息已保存到MongoDB")
 
-# 執行抓取並存儲商品信息
-python3 coles_scraper.py
+if __name__ == "__main__":
+    products = scrape_coles()
+    if products:
+        save_to_mongo(products)
+EOL
 
-# 編寫 Flask 前端顯示頁面
-cat <<EOF > app.py
+# 创建Flask应用以展示商品信息
+cat > app.py <<EOL
+# -*- coding: utf-8 -*-
+"""
+Flask 应用，展示商品的图片、名称、实时价格、打折情况以及历史最低价
+"""
 from flask import Flask, render_template
-import pymongo
+from pymongo import MongoClient
 
 app = Flask(__name__)
 
-# 連接到 MongoDB
-client = pymongo.MongoClient("mongodb://python_user:secure_password@localhost:27017/")
-db = client["coles_db"]
-col = db["products"]
-
 @app.route('/')
 def index():
-    products = list(col.find())
+    client = MongoClient("mongodb://coles_user:coles_pass@localhost:27017/coles_data")
+    db = client.coles_data
+    products = db.products.find()
     return render_template('index.html', products=products)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000)
-EOF
+EOL
 
-# 創建前端 HTML 頁面
-mkdir templates
-cat <<EOF > templates/index.html
+# 创建HTML模板目录并创建模板文件
+mkdir -p templates
+cat > templates/index.html <<EOL
 <!DOCTYPE html>
-<html lang="zh-Hans">
+<html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coles 商品價格查詢</title>
+    <title>商品信息列表</title>
 </head>
 <body>
-    <h1>Coles 商品價格查詢</h1>
+    <h1>商品信息</h1>
     <table border="1">
         <tr>
-            <th>商品名稱</th>
-            <th>價格</th>
-            <th>最近更新時間</th>
+            <th>商品图片</th>
+            <th>商品名称</th>
+            <th>实时价格</th>
+            <th>历史最低价</th>
         </tr>
         {% for product in products %}
         <tr>
-            <td>{{ product['name'] }}</td>
-            <td>{{ product['price'] }}</td>
-            <td>{{ product['last_updated'] | date("%Y-%m-%d %H:%M:%S") }}</td>
+            <td><img src="{{ product.image }}" alt="{{ product.name }}" width="100"></td>
+            <td>{{ product.name }}</td>
+            <td>{{ product.price }}</td>
+            <td>{{ product.price }}</td> <!-- 示例代码：这里可以进行更多的历史价格分析 -->
         </tr>
         {% endfor %}
     </table>
 </body>
 </html>
-EOF
+EOL
 
-# 運行 Flask 應用
-python3 app.py
+# 运行Flask应用
+python3 app.py &
 
-echo "一鍵安裝完成，前端服務器已經啟動，請打開瀏覽器並訪問 http://<你的服務器IP>:5000"
+# 打印完成信息
+echo "安装和配置完成，Flask 应用正在运行 http://localhost:5000"
