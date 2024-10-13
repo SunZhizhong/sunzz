@@ -19,14 +19,12 @@ cd Python-3.8.0
 make altinstall
 
 # 确保 Python 3.8 可用，并安装 pip
-ln -s /usr/local/bin/python3.8 /usr/bin/python3
+ln -sf /usr/local/bin/python3.8 /usr/bin/python3
 wget https://bootstrap.pypa.io/get-pip.py
 python3 get-pip.py
 
 # 安装MongoDB
 cat > /etc/yum.repos.d/mongodb-org-6.0.repo <<EOL
-
-
 [mongodb-org-6.0]
 name=MongoDB Repository
 baseurl=https://repo.mongodb.org/yum/redhat/7/mongodb-org/6.0/x86_64/
