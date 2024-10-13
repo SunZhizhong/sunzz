@@ -24,13 +24,13 @@ wget https://bootstrap.pypa.io/get-pip.py
 python3 get-pip.py
 
 # 安装MongoDB
-cat > /etc/yum.repos.d/mongodb-org-6.0.repo <<EOL
-[mongodb-org-6.0]
+cat > /etc/yum.repos.d/mongodb-org-8.0.repo <<EOL
+[mongodb-org-8.0]
 name=MongoDB Repository
-baseurl=https://repo.mongodb.org/yum/redhat/7/mongodb-org/6.0/x86_64/
+baseurl=https://repo.mongodb.org/yum/redhat/8/mongodb-org/8.0/x86_64/
 gpgcheck=1
 enabled=1
-gpgkey=https://pgp.mongodb.com/static/pgp/server-6.0.asc
+gpgkey=https://pgp.mongodb.com/server-8.0.asc
 EOL
 
 sudo yum install -y mongodb-org
@@ -38,6 +38,13 @@ sudo yum install -y mongodb-org
 # 启动MongoDB并设置开机启动
 systemctl start mongod
 systemctl enable mongod
+
+# 安装MongoDB对SELinux的策略
+sudo yum install -y git make checkpolicy policycoreutils selinux-policy-devel
+git clone https://github.com/mongodb/mongodb-selinux
+cd mongodb-selinux
+make
+sudo make install
 
 # 确保MongoDB端口未被防火墙阻止
 firewall-cmd --permanent --add-port=27017/tcp
@@ -51,6 +58,8 @@ db.createUser({ user: "admin", pwd: "password", roles: [ { role: "userAdminAnyDa
 use coles_data
 db.createUser({ user: "coles_user", pwd: "coles_pass", roles: [ { role: "readWrite", db: "coles_data" } ] })
 EOF
+
+
 
 # 安装Python依赖库
 pip3 install pymongo flask requests beautifulsoup4
