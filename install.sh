@@ -25,15 +25,17 @@ python3 get-pip.py
 
 # 安装MongoDB
 cat > /etc/yum.repos.d/mongodb-org-6.0.repo <<EOL
+
+
 [mongodb-org-6.0]
 name=MongoDB Repository
 baseurl=https://repo.mongodb.org/yum/redhat/7/mongodb-org/6.0/x86_64/
 gpgcheck=1
 enabled=1
-gpgkey=https://www.mongodb.org/static/pgp/server-6.0.asc
+gpgkey=https://pgp.mongodb.com/static/pgp/server-6.0.asc
 EOL
 
-yum install -y mongodb-org
+sudo yum install -y mongodb-org
 
 # 启动MongoDB并设置开机启动
 systemctl start mongod
