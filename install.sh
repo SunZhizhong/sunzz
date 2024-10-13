@@ -1,33 +1,23 @@
 #!/bin/bash
-# Coles Scraper Installation Script - CentOS 7
-# 用于在 CentOS 7 上自动安装所需的工具和插件，并配置环境
-# 确保脚本在任何步骤中遇到错误时立即停止
+
+# 確保腳本在出現錯誤時停止
 set -e
 
-# 更新系统
-sudo yum update -y
+# 更新系統並安裝必須的依賴包
+yum update -y
 
-# 安装必备工具和依赖
-sudo yum install -y gcc openssl-devel bzip2-devel libffi-devel wget vim
+# 安裝 EPEL (Extra Packages for Enterprise Linux)
+yum install -y epel-release
 
-# 编译安装 Python 3.8
-cd /usr/src
-wget https://www.python.org/ftp/python/3.8.0/Python-3.8.0.tgz
-tar xzf Python-3.8.0.tgz
-cd Python-3.8.0
-./configure --enable-optimizations
-make altinstall
+# 安裝 Python 3.8 和 pip
+yum install -y python38 python38-pip
 
-# 检查 Python 和 pip 的版本
-python3.8 --version
-pip3.8 --version
+# 創建 Python 3.8 的符號鏈接（確保版本一致）
+ln -sf /usr/bin/python3.8 /usr/bin/python3
+ln -sf /usr/bin/pip3.8 /usr/bin/pip3
 
-# 安装 pip
-curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-python3.8 get-pip.py
-
-# 安装 MongoDB
-sudo tee -a /etc/yum.repos.d/mongodb-org-6.0.repo <<EOF
+# 安裝 MongoDB
+cat <<EOF > /etc/yum.repos.d/mongodb-org-6.0.repo
 [mongodb-org-6.0]
 name=MongoDB Repository
 baseurl=https://repo.mongodb.org/yum/redhat/7/mongodb-org/6.0/x86_64/
@@ -36,91 +26,131 @@ enabled=1
 gpgkey=https://www.mongodb.org/static/pgp/server-6.0.asc
 EOF
 
-sudo yum install -y mongodb-org
+yum install -y mongodb-org
 
-# 启动并配置 MongoDB
-sudo systemctl start mongod
-sudo systemctl enable mongod
+# 啟動和設置 MongoDB 開機自啟
+systemctl start mongod
+systemctl enable mongod
 
-# 检查 MongoDB 是否正在运行
-if ! pgrep -x "mongod" > /dev/null
-then
-    echo "MongoDB 未能启动，请检查安装过程。"
-    exit 1
-fi
+# 確保 MongoDB 的端口 27017 沒有被防火牆阻止
+firewall-cmd --zone=public --add-port=27017/tcp --permanent
+firewall-cmd --reload
 
-# 配置 MongoDB 以允许对 /tmp 的写权限
-sudo chmod 1777 /tmp
+# 確保 /tmp 具有寫權限
+chmod 1777 /tmp
 
-# 检查防火墙配置，确保 MongoDB 端口未被阻止
-sudo firewall-cmd --zone=public --add-port=27017/tcp --permanent
-sudo firewall-cmd --reload
+# 創建 MongoDB 用戶並賦予讀寫權限
+mongo <<EOF
+use admin
+db.createUser(
+  {
+    user: "python_user",
+    pwd: "secure_password",
+    roles: [ { role: "readWrite", db: "coles_db" } ]
+  }
+)
+EOF
 
-# 设置 MongoDB 路径
-export PATH=$PATH:/usr/bin:/usr/local/bin
+# 安裝必備 Python 庫
+pip3 install pymongo requests beautifulsoup4 flask
 
-# 创建 MongoDB 用户并授予读写权限
-mongo --eval 'use admin; db.createUser({user: "myUserAdmin", pwd: "abc123", roles: [ { role: "userAdminAnyDatabase", db: "admin" }, "readWriteAnyDatabase" ]});'
+# 下載 Coles 商品信息獲取代碼
+curl -o coles_scraper.ipynb https://raw.githubusercontent.com/adambadge/coles-scraper/master/coles.ipynb
 
-# 安装 Python 所需的库
-pip3.8 install pymongo flask requests beautifulsoup4
+# 編寫 Python 腳本來抓取商品信息並存儲至 MongoDB
+cat <<EOF > coles_scraper.py
+import pymongo
+import requests
+import time
+from bs4 import BeautifulSoup
 
-# 克隆 Coles Scraper 并集成到系统
-cd /opt
-sudo git clone https://github.com/adambadge/coles-scraper.git
-cd coles-scraper
+# 連接到 MongoDB
+try:
+    client = pymongo.MongoClient("mongodb://python_user:secure_password@localhost:27017/")
+    db = client["coles_db"]
+    col = db["products"]
+except Exception as e:
+    print("無法連接到 MongoDB:", e)
+    exit(1)
 
-# 编辑代码以解决 Non-ASCII 问题
-# 将代码中的文件打开，确保所有文件以 utf-8 编码处理
-sudo vim coles.ipynb
+# 獲取商品信息並存儲到 MongoDB
+try:
+    response = requests.get("https://coles.com.au/api/products")
+    response.encoding = 'utf-8'
+    products = response.json()
+    
+    for product in products:
+        product_name = product.get("name")
+        product_price = product.get("price")
+        
+        # 插入到 MongoDB
+        col.update_one(
+            {"name": product_name},
+            {"$set": {"price": product_price, "last_updated": time.time()}},
+            upsert=True
+        )
+        
+    print("成功存儲商品信息")
+except Exception as e:
+    print("獲取商品信息失敗:", e)
+    exit(1)
+EOF
 
-# 创建 Flask 应用，显示商品信息
-cat <<EOL > /opt/coles-scraper/app.py
+# 執行抓取並存儲商品信息
+python3 coles_scraper.py
+
+# 編寫 Flask 前端顯示頁面
+cat <<EOF > app.py
 from flask import Flask, render_template
 import pymongo
 
 app = Flask(__name__)
 
+# 連接到 MongoDB
+client = pymongo.MongoClient("mongodb://python_user:secure_password@localhost:27017/")
+db = client["coles_db"]
+col = db["products"]
+
 @app.route('/')
-def home():
-    client = pymongo.MongoClient("mongodb://myUserAdmin:abc123@localhost:27017/")
-    db = client["coles_database"]
-    products = db["products"].find()
+def index():
+    products = list(col.find())
     return render_template('index.html', products=products)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-EOL
+EOF
 
-# 创建 HTML 模板以显示商品信息
-mkdir -p /opt/coles-scraper/templates
-cat <<EOL > /opt/coles-scraper/templates/index.html
+# 創建前端 HTML 頁面
+mkdir templates
+cat <<EOF > templates/index.html
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-Hans">
 <head>
     <meta charset="UTF-8">
-    <title>Coles 商品信息</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coles 商品價格查詢</title>
 </head>
 <body>
-    <h1>商品列表</h1>
-    <ul>
+    <h1>Coles 商品價格查詢</h1>
+    <table border="1">
+        <tr>
+            <th>商品名稱</th>
+            <th>價格</th>
+            <th>最近更新時間</th>
+        </tr>
         {% for product in products %}
-        <li>
-            <img src="{{ product['image'] }}" alt="{{ product['name'] }}">
-            <p>名称: {{ product['name'] }}</p>
-            <p>价格: {{ product['price'] }}</p>
-            <p>打折情况: {{ product['discount'] }}</p>
-            <p>历史最低价: {{ product['lowest_price'] }}</p>
-        </li>
+        <tr>
+            <td>{{ product['name'] }}</td>
+            <td>{{ product['price'] }}</td>
+            <td>{{ product['last_updated'] | date("%Y-%m-%d %H:%M:%S") }}</td>
+        </tr>
         {% endfor %}
-    </ul>
+    </table>
 </body>
 </html>
-EOL
+EOF
 
-# 启动 Flask 应用
-cd /opt/coles-scraper
-python3.8 app.py &
+# 運行 Flask 應用
+python3 app.py
 
-# 提示用户安装完成
-echo "安装完成，Flask 应用已启动，访问 http://localhost:5000 查看商品信息。"
+echo "一鍵安裝完成，前端服務器已經啟動，請打開瀏覽器並訪問 http://<你的服務器IP>:5000"
